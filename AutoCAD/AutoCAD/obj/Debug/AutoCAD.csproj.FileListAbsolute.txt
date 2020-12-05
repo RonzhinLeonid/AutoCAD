@@ -1,0 +1,6 @@
+E:\Проект обучение\AutoCAD\AutoCAD\AutoCAD\obj\Debug\AutoCAD.csprojAssemblyReference.cache
+E:\Проект обучение\AutoCAD\AutoCAD\AutoCAD\obj\Debug\AutoCAD.csproj.CoreCompileInputs.cache
+E:\Проект обучение\AutoCAD\AutoCAD\AutoCAD\bin\Debug\AutoCAD.dll
+E:\Проект обучение\AutoCAD\AutoCAD\AutoCAD\bin\Debug\AutoCAD.pdb
+E:\Проект обучение\AutoCAD\AutoCAD\AutoCAD\obj\Debug\AutoCAD.dll
+E:\Проект обучение\AutoCAD\AutoCAD\AutoCAD\obj\Debug\AutoCAD.pdb
