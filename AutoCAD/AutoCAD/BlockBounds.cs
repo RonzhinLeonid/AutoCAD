@@ -11,31 +11,30 @@ namespace AutoCAD
     public class BlockBounds
     {
         [CommandMethod("BlockBounds")]
-        public void BlockExt()
+        public void BlockFrame()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;
             if (doc == null) return;
-            Editor ed = doc.Editor;
-            PromptEntityOptions enOpt =
+            Editor edit = doc.Editor;
+            PromptEntityOptions entityOpt =
               new PromptEntityOptions("\nВыберите примитив: ");
-            PromptEntityResult enRes = ed.GetEntity(enOpt);
+            PromptEntityResult entityRes = edit.GetEntity(entityOpt);
 
-            if (enRes.Status != PromptStatus.OK) return;
+            if (entityRes.Status != PromptStatus.OK) return;
 
-            Extents3d blockExt =
+            Extents3d blockFrame =
               new Extents3d(Point3d.Origin, Point3d.Origin);
-            Matrix3d mat = Matrix3d.Identity;
 
-            using (Entity en = enRes.ObjectId.Open(OpenMode.ForRead) as Entity)
+            using (Entity element = entityRes.ObjectId.Open(OpenMode.ForRead) as Entity)
             {
-                GetBlockExtents(en, ref blockExt, ref mat);
+                GetBlockExtents(element, ref blockFrame);
 
             }
             
             string s =
-              "MinPoint: " + blockExt.MinPoint.ToString() + " " +
-              "MaxPoint: " + blockExt.MaxPoint.ToString();
-            ed.WriteMessage(s);
+              "MinPoint: " + blockFrame.MinPoint.ToString() + " " +
+              "MaxPoint: " + blockFrame.MaxPoint.ToString();
+            edit.WriteMessage(s);
             //------------------------------------------------------------
             // Только для тестирования полученного габаритного контейнера
             //------------------------------------------------------------
@@ -44,12 +43,12 @@ namespace AutoCAD
               doc.Database.CurrentSpaceId.Open(OpenMode.ForWrite) as BlockTableRecord)
             {
                 Point3dCollection pts = new Point3dCollection();
-                pts.Add(blockExt.MinPoint);
-                pts.Add(new Point3d(blockExt.MinPoint.X,
-                  blockExt.MaxPoint.Y, blockExt.MinPoint.Z));
-                pts.Add(blockExt.MaxPoint);
-                pts.Add(new Point3d(blockExt.MaxPoint.X,
-                  blockExt.MinPoint.Y, blockExt.MinPoint.Z));
+                pts.Add(blockFrame.MinPoint);
+                pts.Add(new Point3d(blockFrame.MinPoint.X,
+                  blockFrame.MaxPoint.Y, blockFrame.MinPoint.Z));
+                pts.Add(blockFrame.MaxPoint);
+                pts.Add(new Point3d(blockFrame.MaxPoint.X,
+                  blockFrame.MinPoint.Y, blockFrame.MinPoint.Z));
                 using (Polyline3d poly =
                   new Polyline3d(Poly3dType.SimplePoly, pts, true))
                 {
@@ -60,89 +59,53 @@ namespace AutoCAD
 
         }
         /// <summary>
-        /// Рекурсивное получение габаритного контейнера для вставки блока.
+        /// Рекурсивное получение габаритного контейнера блока.
         /// </summary>
-        /// <param name="en">Имя примитива</param>
-        /// <param name="ext">Габаритный контейнер</param>
+        /// <param name="element">Имя примитива</param>
+        /// <param name="boundaries">Габаритный контейнер</param>
         /// <param name="mat">Матрица преобразования из системы координат блока в МСК.</param>
-        void GetBlockExtents(Entity en, ref Extents3d ext, ref Matrix3d mat)
+        void GetBlockExtents(Entity element, ref Extents3d boundaries)
         {
-            if (!IsLayerOn(en.LayerId))
+            if (!IsLayerOn(element.LayerId))
                 return;
-            if (en is BlockReference)
+            if (element is BlockReference)
             {
-                BlockReference bref = en as BlockReference;
-                Matrix3d matIns = mat * bref.BlockTransform;
-                using (BlockTableRecord btr =
-                  bref.BlockTableRecord.Open(OpenMode.ForRead) as BlockTableRecord)
+                BlockReference blockRef = element as BlockReference;
+                using (BlockTableRecord blockTR =
+                  blockRef.BlockTableRecord.Open(OpenMode.ForRead) as BlockTableRecord)
                 {
-                    foreach (ObjectId id in btr)
+                    foreach (ObjectId id in blockTR)
                     {
                         using (DBObject obj = id.Open(OpenMode.ForRead) as DBObject)
                         {
-                            Entity enCur = obj as Entity;
-                            if (enCur == null || enCur.Visible != true)
+                            Entity entityCur = obj as Entity;
+                            if (entityCur == null || entityCur.Visible != true)
                                 continue;
                             // Пропускаем неконстантные и невидимые определения атрибутов
-                            AttributeDefinition attDef = enCur as AttributeDefinition;
-                            if (attDef != null && (!attDef.Constant || attDef.Invisible))
+                            AttributeDefinition attDef = entityCur as AttributeDefinition;
+                            if (attDef != null)
                                 continue;
-                            GetBlockExtents(enCur, ref ext, ref matIns);
+                            GetBlockExtents(entityCur, ref boundaries);
                         }
                     }
                 }
-                // Отдельно обрабатываем атрибуты блока
-                //if (bref.AttributeCollection.Count > 0)
-                //{
-                //    foreach (ObjectId idAtt in bref.AttributeCollection)
-                //    {
-                //        using (AttributeReference attRef =
-                //          idAtt.Open(OpenMode.ForRead) as AttributeReference)
-                //        {
-                //            if (!attRef.Invisible && attRef.Visible)
-                //                GetBlockExtents(attRef, ref ext, ref mat);
-                //        }
-                //    }
-                //}
             }
             else
             {
-                if (mat.IsUniscaledOrtho())
+                if (IsEmptyBound(ref boundaries))
                 {
-                    using (Entity enTr = en.GetTransformedCopy(mat))
-                    {
-                        if (IsEmptyExt(ref ext))
-                        {
-                            try { ext = enTr.GeometricExtents; } catch { };
-                        }
-                        else
-                        {
-                            try { ext.AddExtents(enTr.GeometricExtents); } catch { };
-                        }
-                        return;
-                    }
+                    try { boundaries = (Extents3d)element.Bounds; } catch { };
                 }
                 else
                 {
-                    try
-                    {
-                        Extents3d curExt = en.GeometricExtents;
-                        curExt.TransformBy(mat);
-                        if (IsEmptyExt(ref ext))
-                            ext = curExt;
-                        else
-                            ext.AddExtents(curExt);
-                    }
-                    catch { }
-                    return;
+                    try { boundaries.AddExtents((Extents3d)element.Bounds); } catch { };
                 }
+                return;
             }
-
             return;
-
         }
         /// <summary>
-        /// Определяет видны ли объекты на слое, указанном его ObjectId.
+        /// Определяет видны ли объекты на слое, указанном его ObjectId и принадлежность "не нужным" слоям.
         /// </summary>
         /// <param name="layerId">ObjectId слоя.</param>
         /// <returns></returns>
@@ -153,7 +116,8 @@ namespace AutoCAD
                                                             "i_Осевые линии",
                                                             "i_Отверстия",
                                                             "i_Резьбы",
-                                                            "i_Шильд"};
+                                                            "i_Шильд",
+                                                            "Зона сверления"};
             using (LayerTableRecord ltr = layerId.Open(OpenMode.ForRead) as LayerTableRecord)
             {
                 if (ltr.IsFrozen) return false;  
@@ -166,11 +130,11 @@ namespace AutoCAD
         /// <summary>
         /// Определят не пустой ли габаритный контейнер.
         /// </summary>
-        /// <param name="ext">Габаритный контейнер.</param>
+        /// <param name="bound">Габаритный контейнер.</param>
         /// <returns></returns>
-        bool IsEmptyExt(ref Extents3d ext)
+        bool IsEmptyBound(ref Extents3d bound)
         {
-            if (ext.MinPoint.DistanceTo(ext.MaxPoint) < Tolerance.Global.EqualPoint)
+            if (bound.MinPoint.DistanceTo(bound.MaxPoint) < Tolerance.Global.EqualPoint)
                 return true;
             else
                 return false;
