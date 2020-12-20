@@ -69,7 +69,11 @@ namespace AutoCAD
             #endregion
 
         }
-
+        /// <summary>
+        /// Преобразование 2d коллекции в 3d
+        /// </summary>
+        /// <param name="pts"></param>
+        /// <returns></returns>
         private Point3dCollection CovertPoint2dCollTo3dColl(Point2dCollection pts)
         {
             Point3dCollection newPointColl = new Point3dCollection();
@@ -163,7 +167,14 @@ namespace AutoCAD
         }
 
 
-
+        /// <summary>
+        /// получение реальной рамки блока с учетом масштаба блока и угла поворота
+        /// </summary>
+        /// <param name="angle">Угол поворота</param>
+        /// <param name="basePoint">Базовая точка блока</param>
+        /// <param name="blockFrame">Рамка блока</param>
+        /// <param name="scale">Масштаб блока</param>
+        /// <returns></returns>
         private static Point2dCollection GetRealFrameBlock(double angle, Point3d basePoint, Extents3d blockFrame, Scale3d scale)
         {
             Vector2d vector2d = Point2d.Origin.GetVectorTo(new Point2d(basePoint.X, basePoint.Y));
