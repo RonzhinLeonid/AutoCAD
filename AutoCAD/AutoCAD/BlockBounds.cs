@@ -20,6 +20,9 @@ namespace AutoCAD
               new PromptEntityOptions("\nВыберите примитив: ");
             PromptEntityResult entityRes = edit.GetEntity(entityOpt);
 
+            double angle = 0;
+            Scale3d scale = new Scale3d(1, 1, 1);
+            Point3d basePoint = Point3d.Origin;
             if (entityRes.Status != PromptStatus.OK) return;
 
             Extents3d blockFrame =
@@ -28,13 +31,20 @@ namespace AutoCAD
             using (Entity element = entityRes.ObjectId.Open(OpenMode.ForRead) as Entity)
             {
                 GetBlockExtents(element, ref blockFrame);
-
+                BlockReference temp = element as BlockReference;
+                if (temp is BlockReference)
+                {
+                    angle = temp.Rotation;
+                    basePoint = temp.Position;
+                    scale = temp.ScaleFactors;
+                }
             }
-            
+            Point2dCollection pts = GetRealFrameBlock(angle, basePoint, blockFrame, scale);
             string s =
               "MinPoint: " + blockFrame.MinPoint.ToString() + " " +
               "MaxPoint: " + blockFrame.MaxPoint.ToString();
             edit.WriteMessage(s);
+            Point3dCollection pts3d = CovertPoint2dCollTo3dColl(pts);
             //------------------------------------------------------------
             // Только для тестирования полученного габаритного контейнера
             //------------------------------------------------------------
@@ -42,15 +52,16 @@ namespace AutoCAD
             using (BlockTableRecord curSpace =
               doc.Database.CurrentSpaceId.Open(OpenMode.ForWrite) as BlockTableRecord)
             {
-                Point3dCollection pts = new Point3dCollection();
-                pts.Add(blockFrame.MinPoint);
-                pts.Add(new Point3d(blockFrame.MinPoint.X,
-                  blockFrame.MaxPoint.Y, blockFrame.MinPoint.Z));
-                pts.Add(blockFrame.MaxPoint);
-                pts.Add(new Point3d(blockFrame.MaxPoint.X,
-                  blockFrame.MinPoint.Y, blockFrame.MinPoint.Z));
+                //Point3dCollection pts = new Point3dCollection();
+                //pts.Add(blockFrame.MinPoint);
+                //pts.Add(new Point3d(blockFrame.MinPoint.X,
+                //  blockFrame.MaxPoint.Y, blockFrame.MinPoint.Z));
+                //pts.Add(blockFrame.MaxPoint);
+                //pts.Add(new Point3d(blockFrame.MaxPoint.X,
+                //  blockFrame.MinPoint.Y, blockFrame.MinPoint.Z));
                 using (Polyline3d poly =
-                  new Polyline3d(Poly3dType.SimplePoly, pts, true))
+                  new Polyline3d(Poly3dType.SimplePoly, pts3d, true))
+                //public Polyline2d(Poly2dType type, Point3dCollection vertices, double elevation, bool closed, double startWidth, double endWidth, DoubleCollection bulges);
                 {
                     curSpace.AppendEntity(poly);
                 }
@@ -58,6 +69,21 @@ namespace AutoCAD
             #endregion
 
         }
+        /// <summary>
+        /// Преобразование 2d коллекции в 3d
+        /// </summary>
+        /// <param name="pts"></param>
+        /// <returns></returns>
+        private Point3dCollection CovertPoint2dCollTo3dColl(Point2dCollection pts)
+        {
+            Point3dCollection newPointColl = new Point3dCollection();
+            foreach (var item in pts)
+            {
+                newPointColl.Add(new Point3d(item.X, item.Y, 0));
+            }
+            return newPointColl;
+        }
+
         /// <summary>
         /// Рекурсивное получение габаритного контейнера блока.
         /// </summary>
@@ -138,6 +164,38 @@ namespace AutoCAD
                 return true;
             else
                 return false;
+        }
+
+
+        /// <summary>
+        /// получение реальной рамки блока с учетом масштаба блока и угла поворота
+        /// </summary>
+        /// <param name="angle">Угол поворота</param>
+        /// <param name="basePoint">Базовая точка блока</param>
+        /// <param name="blockFrame">Рамка блока</param>
+        /// <param name="scale">Масштаб блока</param>
+        /// <returns></returns>
+        private static Point2dCollection GetRealFrameBlock(double angle, Point3d basePoint, Extents3d blockFrame, Scale3d scale)
+        {
+            Vector2d vector2d = Point2d.Origin.GetVectorTo(new Point2d(basePoint.X, basePoint.Y));
+            Point2d blockFrameAngle1 = new Point2d(blockFrame.MaxPoint.X * scale.X * Math.Cos(angle) - blockFrame.MaxPoint.Y * scale.Y * Math.Sin(angle),
+                                                        blockFrame.MaxPoint.X * scale.X * Math.Sin(angle) + blockFrame.MaxPoint.Y * scale.Y * Math.Cos(angle)
+                                                     );
+            Point2d blockFrameAngle2 = new Point2d(blockFrame.MinPoint.X * scale.X * Math.Cos(angle) - blockFrame.MaxPoint.Y * scale.Y * Math.Sin(angle),
+                                                        blockFrame.MinPoint.X * scale.X * Math.Sin(angle) + blockFrame.MaxPoint.Y * scale.Y * Math.Cos(angle)
+                                                     );
+            Point2d blockFrameAngle3 = new Point2d(blockFrame.MinPoint.X * scale.X * Math.Cos(angle) - blockFrame.MinPoint.Y * scale.Y * Math.Sin(angle),
+                                                        blockFrame.MinPoint.X * scale.X * Math.Sin(angle) + blockFrame.MinPoint.Y * scale.Y * Math.Cos(angle)
+                                                     );
+            Point2d blockFrameAngle4 = new Point2d(blockFrame.MaxPoint.X * scale.X * Math.Cos(angle) - blockFrame.MinPoint.Y * scale.Y * Math.Sin(angle),
+                                                        blockFrame.MaxPoint.X * scale.X * Math.Sin(angle) + blockFrame.MinPoint.Y * scale.Y * Math.Cos(angle)
+                                                     );
+            Point2dCollection pts = new Point2dCollection();
+            pts.Add(blockFrameAngle1 + vector2d);
+            pts.Add(blockFrameAngle2 + vector2d);
+            pts.Add(blockFrameAngle3 + vector2d);
+            pts.Add(blockFrameAngle4 + vector2d);
+            return pts;
         }
     }
 }
